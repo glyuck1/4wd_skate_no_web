@@ -54,9 +54,11 @@
 #define VX1_TIMEOUT_MS      300
 #define DEADZONE            0.05f
 
-#define MAX_TORQUE_FWD      2.0f     
+#define MAX_TORQUE_FWD      3.0f     // Nm на колесо в движении (было 2.0)
+#define MAX_TORQUE_LAUNCH   4.0f     // Nm на колесо при старте с места / наезде на препятствие
+#define LAUNCH_VEL_THRESH   1.0f     // rev/s: пока все колёса медленнее — действует MAX_TORQUE_LAUNCH
 #define MAX_TORQUE_BRAKE    1.0f     
-#define TORQUE_RAMP_RATE    2.0f    
+#define TORQUE_RAMP_RATE    4.0f     // Nm/s (было 2.0): полный момент старта за ~1 с
 #define EMERGENCY_RAMP_RATE 0.5f     // Скорость остановки при обрыве связи
 
 #define BRAKE_VEL_THRESH    0.2f     // Порог остановки (r/s)
@@ -484,10 +486,15 @@ void updateSystem() {
     float max_voltage = 0;
     for(int i=0; i<NUM_AXES; i++) if(axis[i].connected && axis[i].bus_voltage > max_voltage) max_voltage = axis[i].bus_voltage;
     
-    float current_max_fwd = MAX_TORQUE_FWD;
+    // --- LAUNCH BOOST: на месте / на малой скорости разрешаем больший момент ---
+    float max_abs_vel = 0;
+    for (int i = 0; i < NUM_AXES; i++) if (axis[i].connected && fabsf(axis[i].vel_estimate) > max_abs_vel) max_abs_vel = fabsf(axis[i].vel_estimate);
+    float base_max_fwd = (max_abs_vel < LAUNCH_VEL_THRESH) ? MAX_TORQUE_LAUNCH : MAX_TORQUE_FWD;
+
+    float current_max_fwd = base_max_fwd;
     if (max_voltage > 10.0f && max_voltage < BATT_V_LIMP) {
         float multiplier = map_float(max_voltage, BATT_V_MIN, BATT_V_LIMP, 0.3f, 1.0f);
-        current_max_fwd = MAX_TORQUE_FWD * constrain(multiplier, 0.3f, 1.0f);
+        current_max_fwd = base_max_fwd * constrain(multiplier, 0.3f, 1.0f);
     }
 
     bool braking_detected = false;
